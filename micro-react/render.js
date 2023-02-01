@@ -8,11 +8,25 @@ function createDom(fiber) {
     .filter((key) => key !== "children")
     .forEach((name) => (dom[name] = fiber.props[name]));
 
-  return dom
+  return dom;
 
   // element.props.children.forEach((child) => render(child, dom));
 
   // container.appendChild(dom);
+}
+
+function commitRoot() {
+  commitWork(wipRoot.child);
+  wipRoot = null;
+}
+
+// commit each fiber. Append all the nodes to the dom
+function commitWork(fiber) {
+  if (!fiber) return;
+  const parentDom = fiber.parent.dom;
+  parentDom.appendChild(fiber.dom);
+  commitWork(fiber.child);
+  commitWork(fiber.sibling);
 }
 
 // The recursive call of render function above will never stop until we have rendered the
@@ -21,7 +35,7 @@ function createDom(fiber) {
 
 export function render(element, container) {
   // fiber init
-  nextUnitOfWork = {
+  wipRoot = {
     dom: container,
     props: {
       children: [element],
@@ -30,8 +44,11 @@ export function render(element, container) {
     child: null,
     parent: null,
   };
+  nextUnitOfWork = wipRoot;
 }
 
+// work in progress root
+let wipRoot = null;
 let nextUnitOfWork = null;
 
 // will be run when the main thread is idle
@@ -42,6 +59,10 @@ function workLoop(deadline) {
     // check how much idle time we have
     shouldYield = deadline.timeRemaining() < 1;
   }
+  // fiber tree is built, commit
+  if (!nextUnitOfWork && wipRoot) {
+    commitRoot();
+  }
   requestIdleCallback(workLoop);
 }
 
@@ -50,11 +71,11 @@ requestIdleCallback(workLoop);
 function performUnitOfWork(fiber) {
   // create dom for fiber
   if (!fiber.dom) {
-    fiber.dom = createDom(fiber)
+    fiber.dom = createDom(fiber);
   }
-  if (fiber.parent) {
-    fiber.parent.dom.append(fiber.dom)
-  }
+  // if (fiber.parent) {
+  //   fiber.parent.dom.append(fiber.dom)
+  // }
 
   // create fibers for current fiber's children
   const elements = fiber.props.children;
@@ -71,9 +92,11 @@ function performUnitOfWork(fiber) {
       sibling: null,
     };
 
-    if (i === 0) { // the first child of the parent element is also the child of parent fiber
+    if (i === 0) {
+      // the first child of the parent element is also the child of parent fiber
       fiber.child = newFiber;
-    }else { // all the other children are no longer the children of parent, but becomes the siblings of the previous fiber in iteration
+    } else {
+      // all the other children are no longer the children of parent, but becomes the siblings of the previous fiber in iteration
       preSibling.sibling = newFiber;
     }
     preSibling = newFiber;
@@ -87,6 +110,6 @@ function performUnitOfWork(fiber) {
     if (nextFiber.sibling) {
       return nextFiber.sibling;
     }
-    nextFiber = nextFiber.parent
+    nextFiber = nextFiber.parent;
   }
 }
